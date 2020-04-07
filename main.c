@@ -74,7 +74,7 @@ int main(){
     scanf("%lf",&time_end);
     
     voltage_in_node_now = (double*)calloc(node_circuit.Neff,sizeof(double));
-    last_voltage = (double*)calloc(node_circuit.Neff * sizeof(double));
+    last_voltage = (double*)calloc(node_circuit.Neff , sizeof(double));
 
     #ifdef DEBUG
     for (i = 0; i < node_circuit.Neff;i++){
@@ -163,4 +163,3 @@ int main(){
     
     return 0;
 }
- 
