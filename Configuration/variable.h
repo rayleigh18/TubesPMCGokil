@@ -37,6 +37,8 @@ table *nodeNumInArrayPair;
 
 /* Nilai Tegangan pada setiap node, urutan sesuai dengan urutan pada node */
 double *voltage_in_node_now;
+double *last_voltage;
+double *cons_for_time_sample;
 
 /* */
 FILE *out;

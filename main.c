@@ -68,22 +68,13 @@ int main(){
     }
     #endif
 
-
-
     printf("Masukkan Nilai Waktu Awal Simulasi :");
     scanf("%lf",&time_start);
     printf("Masukkan Nilai Waktu Akhir dari Simulasi \n");
     scanf("%lf",&time_end);
     
-    //for saving coefficient
-    circuit_node_coefficient = makeKoefisienTab(node_circuit.Neff);
-
-    // voltage_in_node_now = (double**)calloc(node_circuit.Neff, sizeof(double*));
-
-    // for (time_now = time_start; time_now <= time_end; time_start+=SMALLEST_TIME_SAMPLING){
-    //     solveCircuit();
-    //     outputToFile();
-    // }
+    voltage_in_node_now = (double*)calloc(node_circuit.Neff,sizeof(double));
+    last_voltage = (double*)calloc(node_circuit.Neff * sizeof(double));
 
     #ifdef DEBUG
     for (i = 0; i < node_circuit.Neff;i++){
@@ -95,12 +86,59 @@ int main(){
     // solve circuit
     // Circuit Analysis
     time_sample = SMALLEST_TIME_SAMPLING;
-    makeMatricesVoltage(&circuit_node_coefficient,voltage_source_list,node_circuit,nodeNumInArrayPair);
     
-    KCLAnalysisPerNode(&circuit_node_coefficient,voltage_source_list, current_source_list,
-    resistor_list, inductor_list, capacitor_list, node_circuit, nodeNumInArrayPair,time_sample);
+    double det_value;
+    fprintf(out,"time");
+    for (i = 0; i < node_circuit.Neff; i++){
+        fprintf(out,",node %d(V)",node_circuit.array[i].name);
+    }
+    fprintf(out,"\n");
+    for (time_now = time_start; time_now < time_end; time_now += time_sample){    
+      circuit_node_coefficient = makeKoefisienTab(node_circuit.Neff);  
+      makeMatricesVoltage(&circuit_node_coefficient,voltage_source_list,node_circuit,nodeNumInArrayPair);
+      
+      KCLAnalysisPerNode(&circuit_node_coefficient,voltage_source_list, current_source_list,
+      resistor_list, inductor_list, capacitor_list, node_circuit, nodeNumInArrayPair,time_sample);
+      // time_sample = SMALLEST_TIME_SAMPLING;
+
+      det_value = findDeterminant(circuit_node_coefficient.array_koef, node_circuit.Neff);
+      
+      for (i = 0; i < node_circuit.Neff; i++){
+        last_voltage[i] = voltage_in_node_now[i];
+      }
+      voltage_in_node_now = matrixMultSquareTimesOneColumn(node_circuit.Neff, adjoint(circuit_node_coefficient.array_koef, node_circuit.Neff), 
+      circuit_node_coefficient.ans);
+      scalarMatrixMultiplication(1/det_value, node_circuit.Neff,voltage_in_node_now);
+
+      // printMatrix(circuit_node_coefficient.array_koef, node_circuit.Neff);
+      // printArray(circuit_node_coefficient.ans, node_circuit.Neff);
+
+      updateComponent(&capacitor_list,&inductor_list,voltage_in_node_now,nodeNumInArrayPair,time_sample);
+
+      // output to file
+      fprintf(out,"%f",time_now);
+      for (i = 0; i < node_circuit.Neff; i++){
+        fprintf(out,",%f",voltage_in_node_now[i]);        
+      }
+      fprintf(out,"\n");
+      double max_grad;
+      double temp_grad;
+      for (i = 0; i < node_circuit.Neff; i++){
+        temp_grad = fabs((voltage_in_node_now - last_voltage)/time_sample);
+        max_grad = temp_grad > max_grad ? temp_grad : max_grad;
+      }
+      double cons_ti_max = 0.1;
+      double cons_ti_min = 0.00003;
+
+      if (max_grad > cons_ti_max/(time_end - time_start)){
+        time_sample = max_grad > SMALLEST_TIME_SAMPLING ?time_sample/2 : SMALLEST_TIME_SAMPLING;
+      }
+      else if (max_grad < cons_ti_min/(time_end - time_start)){
+        time_sample = max_grad < BIGGEST_TIME_SAMPLING  ?time_sample*2 : BIGGEST_TIME_SAMPLING;
+      }
+    }
     
-        
+    
     #ifdef DEBUG
     for (i = 0; i < node_circuit.Neff; i++){
         printf("%d ",node_circuit.array[i].name);
@@ -113,21 +151,14 @@ int main(){
     printArray(circuit_node_coefficient.ans, node_circuit.Neff);
     #endif
 
-    double det_value = findDeterminant(circuit_node_coefficient.array_koef, node_circuit.Neff);
     
-    
-    voltage_in_node_now = matrixMultSquareTimesOneColumn(node_circuit.Neff, adjoint(circuit_node_coefficient.array_koef, node_circuit.Neff), 
-    circuit_node_coefficient.ans);
-    scalarMatrixMultiplication(1/det_value, node_circuit.Neff,voltage_in_node_now);
 
     for (i = 0; i < node_circuit.Neff; i++){
         printf("V di node %d adalah %f\n",node_circuit.array[i].name,voltage_in_node_now[i]);
     }
 
-    // output to file
 
-
-    
+    fclose(out);
     
     
     return 0;

@@ -5,7 +5,7 @@
 #include "model.h"
 
 void makeMatricesVoltage(koefisien_tab* circuit_node_coefficient,voltage_source_tab volt, node_tab node_circuit,
-                         struct table *nodeNumInArrayPair){
+                         table *nodeNumInArrayPair){
     int i;
     int total_node = circuit_node_coefficient->total_node;
 
@@ -35,12 +35,7 @@ void makeMatricesVoltage(koefisien_tab* circuit_node_coefficient,voltage_source_
 int findRow(double *row,double *ans,int* isDone,current_source_tab curr_list, resistor_tab res_list, voltage_source_tab volt_list,
             node_tab node_circuit,inductor_tab ind_list, capacitor_tab cap_list,  node_t node,struct table *nodeNumInArrayPair, double time_sample, int *udahAdaVoltage)
 {
-    // printf("node = %d\n",node.name);
-    
-    // for (i = 0; i <nodeNumInArrayPair->size; i++ ){
-    //     printf("%f ",row[i]);
-    // }
-    // printf("\n");
+
     int i;
     if (isDone[lookup(nodeNumInArrayPair, node.name)]){
         return -1;
@@ -54,6 +49,7 @@ int findRow(double *row,double *ans,int* isDone,current_source_tab curr_list, re
     current_source_t temp_cur;
     resistor_t temp_res;
     capacitor_t temp_cap;
+    inductor_t temp_ind;
 
     isDone[lookup(nodeNumInArrayPair, node.name)] = 1;
 
@@ -95,11 +91,31 @@ int findRow(double *row,double *ans,int* isDone,current_source_tab curr_list, re
         else{
             (*ans) -= temp_cap.value * temp_cap.last_volt/time_sample;
         }
-        if (temp_res.node1 != node.name){
-            row[lookup(nodeNumInArrayPair, node.name)] += temp_cap.value / (time_sample);
+        
+        if (temp_cap.node1 != node.name){
+            row[lookup(nodeNumInArrayPair, temp_cap.node1)] -= temp_cap.value / (time_sample);
         }
         else{
-            row[lookup(nodeNumInArrayPair, node.name)] -= temp_cap.value / (time_sample);
+            row[lookup(nodeNumInArrayPair, temp_cap.node2)] -= temp_cap.value / (time_sample);
+        }
+    }
+
+    // inductor
+    for (i = 0; i < node.ind_list.Neff; i++){
+        temp_ind = ind_list.array[(node.ind_list.array)[i]];
+        row[lookup(nodeNumInArrayPair, node.name)] += time_sample / temp_ind.value;
+        if (temp_ind.node1 == node.name){
+            (*ans) -= temp_ind.last_curr;
+        }
+        else{
+            (*ans) += temp_ind.last_curr;
+        }
+        
+        if (temp_ind.node1 != node.name){
+            row[lookup(nodeNumInArrayPair, temp_ind.node1)] -= time_sample / temp_ind.value;
+        }
+        else{
+            row[lookup(nodeNumInArrayPair, temp_ind.node2)] -= time_sample / temp_ind.value;
         }
     }   
 
@@ -115,12 +131,6 @@ int findRow(double *row,double *ans,int* isDone,current_source_tab curr_list, re
             return -1;
         }
 
-        // if (node.name != temp_vol.nodeNeg && isDone[nodeNegInArray] == 1){                     
-        //     return -1;
-        // }
-        // else if (node.name != temp_vol.nodePos && isDone[nodePosInArray] == 1){             
-        //     return -1;
-        // }
 
     }
 
@@ -153,7 +163,7 @@ int findRow(double *row,double *ans,int* isDone,current_source_tab curr_list, re
 }
 
 void KCLAnalysisPerNode(koefisien_tab* circuit_node_coefficient,voltage_source_tab volt_list,current_source_tab curr_list, resistor_tab res_list, 
-                        inductor_tab ind_list, capacitor_tab cap_list,  node_tab node_circuit,struct table *nodeNumInArrayPair, double time_sample)
+                        inductor_tab ind_list, capacitor_tab cap_list,  node_tab node_circuit,table *nodeNumInArrayPair, double time_sample)
 {
     int total_node = circuit_node_coefficient->total_node;
     int i;
@@ -164,19 +174,35 @@ void KCLAnalysisPerNode(koefisien_tab* circuit_node_coefficient,voltage_source_t
     
     double *row = (double *)calloc(total_node,sizeof(double));;
     double ans;
-    printf("Total NEff = %d\n",circuit_node_coefficient->Neff);
+    //printf("Total NEff = %d\n",circuit_node_coefficient->Neff);
     for (i = 0; i < total_node; i++){
         free(row);
         row = (double *)calloc(total_node,sizeof(double));
         ans = 0;
         if (!isDone[i]){
-            // printf("i = %d\n",i)       ;
             if (findRow(row, &ans, isDone, curr_list, res_list, volt_list,node_circuit, ind_list, cap_list, node_circuit.array[i],nodeNumInArrayPair,time_sample, udahAdaVoltage) > 0){
                 inserRowToKoefTab(circuit_node_coefficient, row, ans);
-                // printf("Total NEff = %d\n",circuit_node_coefficient->Neff);
-                // printf("debug");
+
             }
         }
+    }
+}
+
+void updateComponent(capacitor_tab *cap_list, inductor_tab *ind_list,double *voltage_now, table *nodeNumInArrayPair, double time_sample){
+    int i;
+    capacitor_t temp_cap;
+    for (i = 0; i < cap_list->Neff;i++){
+        temp_cap = (cap_list->array)[i];
+        temp_cap.last_volt = voltage_now[lookup(nodeNumInArrayPair,temp_cap.node1)] - voltage_now[lookup(nodeNumInArrayPair,temp_cap.node2)];
+        (cap_list->array)[i] = temp_cap;
+    }
+
+    inductor_t temp_ind;
+    for (i = 0; i < ind_list->Neff;i++){
+        temp_ind = (ind_list->array)[i];
+        temp_ind.last_curr += ((voltage_now[lookup(nodeNumInArrayPair,temp_ind.node1)] - voltage_now[lookup(nodeNumInArrayPair,temp_ind.node2)])*time_sample/temp_ind.value) ;
+        
+        (ind_list->array)[i] = temp_ind;
     }
 }
 
